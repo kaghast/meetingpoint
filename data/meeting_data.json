@@ -28,5 +28,22 @@
   "answers": [],
   "attendanceRecords": [],
   "feedback": [],
-  "participantProfiles": {}
+  "participantProfiles": {
+    "anon-i2qrq29g": {
+      "name": "Hızlı Kedi",
+      "avatar": "🦝"
+    },
+    "anon-q26halul": {
+      "name": "Hızlı Ahtapot",
+      "avatar": "🐯"
+    },
+    "anon-eqli2p1e": {
+      "name": "Uçan Kunduz",
+      "avatar": "🐧"
+    },
+    "anon-pdb5aysm": {
+      "name": "Piksel Rakun",
+      "avatar": "🐺"
+    }
+  }
 }
