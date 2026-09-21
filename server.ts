@@ -410,6 +410,11 @@ async function startServer() {
     res.json({ success: true, profile: { id: participantId, name, avatar } });
   });
 
+  // Health check endpoints for Coolify, Docker, and load balancers
+  app.get(['/api/health', '/health'], (req, res) => {
+    res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
+
   // Public session state
   // STRICT RULES:
   // 1. "Sonuçlar ancak oturum bitirince gözükmeli." (Results only show when sessionEnded === true)
