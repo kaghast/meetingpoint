@@ -203,7 +203,12 @@ function evaluateAnswer(question: Question, value: any): { isCorrect: boolean; p
 }
 
 // Compute summary results for a question (strictly filtered by session if given)
-function computeQuestionResults(question: Question, answers: Answer[], sessionId?: string): QuestionResultsSummary {
+function computeQuestionResults(
+  question: Question, 
+  answers: Answer[], 
+  sessionId?: string,
+  attendanceRecords?: AttendanceRecord[]
+): QuestionResultsSummary {
   const qAnswers = answers.filter((a) => a.questionId === question.id && (!sessionId || a.sessionId === sessionId));
   const totalVotes = qAnswers.length;
 
@@ -263,7 +268,26 @@ function computeQuestionResults(question: Question, answers: Answer[], sessionId
       participantAvatar: a.participantAvatar,
     }));
   } else if (question.type === 'attendance') {
-    summary.attendanceRecordsCount = qAnswers.length;
+    const attList = (attendanceRecords || []).filter(
+      (r) => !sessionId || r.sessionId === sessionId
+    );
+    summary.attendanceRecordsCount = attList.length > 0 ? attList.length : qAnswers.length;
+  }
+
+  // Calculate Quiz Statistics if this is a Quiz question
+  if (question.isQuiz && question.correctAnswer !== undefined) {
+    let correctCount = 0;
+    qAnswers.forEach((ans) => {
+      if (ans.isCorrect) correctCount++;
+    });
+    const wrongCount = Math.max(0, totalVotes - correctCount);
+    const correctPercentage = totalVotes > 0 ? Math.round((correctCount / totalVotes) * 100) : 0;
+    summary.quizStats = {
+      correctCount,
+      wrongCount,
+      correctPercentage,
+      correctAnswer: question.correctAnswer,
+    };
   }
 
   return summary;
@@ -534,7 +558,7 @@ async function startServer() {
 
   // Submit Answer - STRICT RULE: Participant CANNOT change answer once submitted!
   app.post('/api/participant/answer', (req, res) => {
-    const { participantId, questionId, value, participantName, participantAvatar } = req.body;
+    const { participantId, questionId, value, participantName, participantAvatar, sessionId } = req.body;
 
     if (!participantId || !questionId || value === undefined) {
       return res.status(400).json({ error: 'participantId, questionId, ve value zorunludur.' });
@@ -546,6 +570,8 @@ async function startServer() {
     if (!activeSession) {
       return res.status(400).json({ error: 'Aktif bir oturum bulunmamaktadır.' });
     }
+
+    const targetSessionId = sessionId || activeSession.id;
 
     if (activeSession.pollStatus !== 'open') {
       return res.status(400).json({ error: 'Oylama şu an oturum yöneticisi tarafından durduruldu.' });
@@ -562,7 +588,7 @@ async function startServer() {
 
     // STRICT CHECK: Participant cannot change answer after submission for this session
     const existing = store.answers.find(
-      (a) => a.questionId === questionId && a.participantId === participantId && a.sessionId === activeSession.id
+      (a) => a.questionId === questionId && a.participantId === participantId && a.sessionId === targetSessionId
     );
 
     if (existing) {
@@ -591,7 +617,7 @@ async function startServer() {
     const nowIso = new Date().toISOString();
     const newAnswer: Answer = {
       id: 'ans-' + Math.random().toString(36).substring(2, 9),
-      sessionId: activeSession.id,
+      sessionId: targetSessionId,
       questionId,
       participantId,
       participantName: profile.name,
@@ -607,17 +633,17 @@ async function startServer() {
     saveData(store);
 
     const updatedResults = (!activeSession.isArchived && activeSession.sessionEnded)
-      ? computeQuestionResults(question, store.answers, activeSession.id)
+      ? computeQuestionResults(question, store.answers, targetSessionId, store.attendanceRecords)
       : null;
     const updatedLeaderboard = (!activeSession.isArchived && activeSession.sessionEnded)
-      ? computeLeaderboard(store, activeSession.id)
+      ? computeLeaderboard(store, targetSessionId)
       : [];
 
     broadcastSSE('answer-submitted', {
       questionId,
-      sessionId: activeSession.id,
+      sessionId: targetSessionId,
       results: updatedResults,
-      totalResponses: store.answers.filter((a) => a.questionId === questionId && a.sessionId === activeSession.id).length,
+      totalResponses: store.answers.filter((a) => a.questionId === questionId && a.sessionId === targetSessionId).length,
       leaderboard: updatedLeaderboard,
     });
 
@@ -868,7 +894,7 @@ async function startServer() {
 
     const summaries: Record<string, QuestionResultsSummary> = {};
     store.questions.forEach((q) => {
-      summaries[q.id] = computeQuestionResults(q, store.answers, activeSession?.id);
+      summaries[q.id] = computeQuestionResults(q, store.answers, activeSession?.id, store.attendanceRecords);
     });
 
     const leaderboard = activeSession ? computeLeaderboard(store, activeSession.id) : [];
@@ -877,6 +903,15 @@ async function startServer() {
     const sessionLeaderboards: Record<string, LeaderboardEntry[]> = {};
     store.sessions.forEach((s) => {
       sessionLeaderboards[s.id] = computeLeaderboard(store, s.id);
+    });
+
+    // Compute question-by-question summaries associated with each session
+    const sessionResults: Record<string, Record<string, QuestionResultsSummary>> = {};
+    store.sessions.forEach((s) => {
+      sessionResults[s.id] = {};
+      store.questions.forEach((q) => {
+        sessionResults[s.id][q.id] = computeQuestionResults(q, store.answers, s.id, store.attendanceRecords);
+      });
     });
 
     res.json({
@@ -901,8 +936,56 @@ async function startServer() {
       attendanceSecondsLeft: activeSession?.attendanceExpiresAt ? Math.max(0, Math.ceil((activeSession.attendanceExpiresAt - Date.now()) / 1000)) : 0,
       feedback: store.feedback,
       summaries,
+      sessionResults,
       leaderboard,
       sessionLeaderboards,
+    });
+  });
+
+  // Dedicated endpoint for question-based session results
+  app.get('/api/admin/sessions/:sessionId/results', verifyAdminAuth, (req, res) => {
+    const { sessionId } = req.params;
+    const store = loadData();
+    const session = store.sessions.find((s) => s.id === sessionId);
+    if (!session) {
+      return res.status(404).json({ error: 'Oturum bulunamadı.' });
+    }
+
+    const sessionAnswers = store.answers.filter((a) => a.sessionId === sessionId);
+    const sessionAttendance = (store.attendanceRecords || []).filter((r) => r.sessionId === sessionId);
+
+    // Identify all questions associated with this session (assigned, answered, or attendance)
+    const associatedQuestionIds = new Set(session.assignedQuestionIds || []);
+    sessionAnswers.forEach((a) => associatedQuestionIds.add(a.questionId));
+    if (sessionAttendance.length > 0) {
+      const attQ = store.questions.find((q) => q.type === 'attendance');
+      if (attQ) associatedQuestionIds.add(attQ.id);
+    }
+
+    const sessionQuestions = store.questions.filter((q) => 
+      associatedQuestionIds.has(q.id) || associatedQuestionIds.size === 0
+    );
+
+    const summaries: Record<string, QuestionResultsSummary> = {};
+    sessionQuestions.forEach((q) => {
+      summaries[q.id] = computeQuestionResults(q, store.answers, sessionId, store.attendanceRecords);
+    });
+
+    const uniqueParticipantIds = new Set([
+      ...sessionAnswers.map((a) => a.participantId),
+      ...sessionAttendance.map((r) => r.participantId),
+    ]);
+
+    return res.json({
+      session,
+      questions: sessionQuestions,
+      summaries,
+      answers: sessionAnswers,
+      attendanceRecords: sessionAttendance,
+      totalParticipants: uniqueParticipantIds.size,
+      totalAnswers: sessionAnswers.length,
+      totalAttendance: sessionAttendance.length,
+      leaderboard: computeLeaderboard(store, sessionId),
     });
   });
 

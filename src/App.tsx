@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Header } from './components/Header';
 import { ParticipantView } from './components/ParticipantView';
 import { AdminDashboard } from './components/AdminDashboard';
-import { QRCodeModal } from './components/QRCodeModal';
 import { AdminLoginModal } from './components/AdminLoginModal';
 import { QuestionEditorModal } from './components/QuestionEditorModal';
 import { LeaderboardModal } from './components/LeaderboardModal';
@@ -74,12 +73,7 @@ export default function App() {
   const [adminAnswers, setAdminAnswers] = useState<Answer[]>([]);
   const [adminSummaries, setAdminSummaries] = useState<Record<string, QuestionResultsSummary>>({});
 
-  // QR Modal custom session targeting
-  const [qrSessionCode, setQrSessionCode] = useState('');
-  const [qrSessionTitle, setQrSessionTitle] = useState('');
-
   // Modals state
-  const [isQRModalOpen, setIsQRModalOpen] = useState(false);
   const [isAdminLoginOpen, setIsAdminLoginOpen] = useState(false);
   const [isEditorModalOpen, setIsEditorModalOpen] = useState(false);
   const [editorLaunchByDefault, setEditorLaunchByDefault] = useState(false);
@@ -864,12 +858,6 @@ export default function App() {
     }
   };
 
-  const handleOpenQRForSession = (code: string, title: string) => {
-    setQrSessionCode(code);
-    setQrSessionTitle(title);
-    setIsQRModalOpen(true);
-  };
-
   // Attendance handlers
   const handleStartAttendance = async (sessionId: string): Promise<boolean> => {
     if (!adminToken) return false;
@@ -967,7 +955,6 @@ export default function App() {
         viewMode={viewMode}
         profile={profile}
         sessionEnded={sessionEnded}
-        onOpenQR={() => handleOpenQRForSession(sessionCode, sessionTitle)}
         onAdminLogout={handleAdminLogout}
         onOpenProfileModal={() => setIsProfileModalOpen(true)}
         onOpenLeaderboard={() => setIsLeaderboardOpen(true)}
@@ -1020,7 +1007,6 @@ export default function App() {
             onDeleteSession={handleDeleteSession}
             onArchiveSession={handleArchiveSession}
             onActivateSession={handleActivateSession}
-            onOpenQRForSession={handleOpenQRForSession}
             onToggleFeedbackRead={handleToggleFeedbackRead}
             onMarkAllFeedbackRead={handleMarkAllFeedbackRead}
             onStartAttendance={handleStartAttendance}
@@ -1058,13 +1044,6 @@ export default function App() {
       </main>
 
       {/* Modals */}
-      <QRCodeModal
-        isOpen={isQRModalOpen}
-        onClose={() => setIsQRModalOpen(false)}
-        sessionCode={qrSessionCode}
-        sessionTitle={qrSessionTitle}
-      />
-
       <AdminLoginModal
         isOpen={isAdminLoginOpen}
         onClose={handleCloseAdminLogin}

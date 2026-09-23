@@ -31,7 +31,6 @@ import {
   Clock,
   Calendar,
   Archive,
-  QrCode,
   CheckCircle,
   CircleDot,
   MailCheck,
@@ -52,6 +51,7 @@ import {
 import { downloadCSV, generateSessionAnswersCSV } from '../utils/csv';
 import { SessionEditorModal } from './SessionEditorModal';
 import { AttendanceModal } from './AttendanceModal';
+import { SessionResultsModal } from './SessionResultsModal';
 
 interface AdminDashboardProps {
   adminToken: string;
@@ -91,7 +91,6 @@ interface AdminDashboardProps {
   onDeleteSession: (id: string) => Promise<boolean>;
   onArchiveSession: (id: string, isArchived: boolean) => Promise<boolean>;
   onActivateSession: (id: string) => Promise<boolean>;
-  onOpenQRForSession: (code: string, title: string) => void;
   // Feedback operations
   onToggleFeedbackRead: (feedbackId: string, isRead?: boolean) => Promise<boolean>;
   onMarkAllFeedbackRead: (sessionId?: string) => Promise<boolean>;
@@ -139,7 +138,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onDeleteSession,
   onArchiveSession,
   onActivateSession,
-  onOpenQRForSession,
   onToggleFeedbackRead,
   onMarkAllFeedbackRead,
   onStartAttendance,
@@ -151,6 +149,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [deleteSessionConfirmId, setDeleteSessionConfirmId] = useState<string | null>(null);
   const [resetConfirm, setResetConfirm] = useState<'current' | 'all' | null>(null);
+
+  // Results Modal State
+  const [isResultsModalOpen, setIsResultsModalOpen] = useState(false);
+  const [selectedSessionForResults, setSelectedSessionForResults] = useState<MeetingSession | null>(null);
 
   // Session Editor Modal State
   const [isSessionModalOpen, setIsSessionModalOpen] = useState(false);
@@ -672,14 +674,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </h4>
                     </div>
 
-                    {/* QR Code trigger */}
+                    {/* Sonuçları Göster trigger */}
                     <button
                       type="button"
-                      onClick={() => onOpenQRForSession(sess.code, sess.title)}
-                      className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-colors cursor-pointer shrink-0"
-                      title="Bu oturumun QR kodunu görüntüle"
+                      onClick={() => {
+                        setSelectedSessionForResults(sess);
+                        setIsResultsModalOpen(true);
+                      }}
+                      className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 shrink-0"
+                      title="Bu oturumun soru bazlı sonuçlarını ve grafiklerini göster"
                     >
-                      <QrCode className="w-4 h-4 text-blue-600" />
+                      <BarChart3 className="w-4 h-4 text-blue-600" />
+                      <span>Sonuçları Göster</span>
                     </button>
                   </div>
 
@@ -839,6 +845,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div className="flex items-center gap-2">
                 <button
                   type="button"
+                  onClick={() => {
+                    const currentSess = sessions.find((s) => s.id === activeSessionId) || sessions[0];
+                    if (currentSess) {
+                      setSelectedSessionForResults(currentSess);
+                      setIsResultsModalOpen(true);
+                    }
+                  }}
+                  className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                  title="Aktif oturumun tüm soru sonuçlarını ve grafiklerini incele"
+                >
+                  <BarChart3 className="w-3.5 h-3.5" />
+                  <span>Sonuçları Göster</span>
+                </button>
+
+                <button
+                  type="button"
                   onClick={() => onTogglePollStatus(pollStatus === 'open' ? 'closed' : 'open')}
                   className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer ${
                     pollStatus === 'open'
@@ -881,7 +903,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   )}
                   <span className="text-slate-400">•</span>
                   <span className="text-slate-600 font-semibold">
-                    {answers.filter((a) => a.questionId === currentActiveQ.id).length} Katılımcı Yanıt Verdi
+                    {answers.filter((a) => a.questionId === currentActiveQ.id && a.sessionId === activeSessionId).length} Katılımcı Yanıt Verdi
                   </span>
                 </div>
 
@@ -1019,7 +1041,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             ) : (
               filteredQuestions.map((q) => {
                 const isActive = q.id === activeQuestionId;
-                const voteCount = answers.filter((a) => a.questionId === q.id).length;
 
                 return (
                   <div
@@ -1115,16 +1136,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <p className="text-xs text-slate-500 leading-relaxed">{q.description}</p>
                     )}
 
-                    <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1 border-t border-slate-100">
-                      <span>{voteCount} Kullanıcı Yanıtı</span>
-                      {q.tags && q.tags.length > 0 && (
-                        <div className="flex gap-1">
-                          {q.tags.map((t) => (
-                            <span key={t} className="text-slate-500">#{t}</span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
+                    {q.tags && q.tags.length > 0 && (
+                      <div className="flex items-center gap-1 text-[11px] text-slate-400 pt-1 border-t border-slate-100">
+                        {q.tags.map((t) => (
+                          <span key={t} className="text-slate-500">#{t}</span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 );
               })
@@ -1618,6 +1636,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         onRefresh={() => {
           if (onRefreshAttendance) onRefreshAttendance();
         }}
+      />
+
+      {/* Session Question Results Modal with Charts */}
+      <SessionResultsModal
+        isOpen={isResultsModalOpen}
+        onClose={() => {
+          setIsResultsModalOpen(false);
+          setSelectedSessionForResults(null);
+        }}
+        session={selectedSessionForResults || activeSessionObj || null}
+        allQuestions={questions}
+        answers={answers}
+        attendanceRecords={attendanceRecords}
+        summaries={summaries}
       />
     </div>
   );

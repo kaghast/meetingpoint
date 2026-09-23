@@ -165,6 +165,12 @@ export interface QuestionResultsSummary {
     participantName?: string; 
     participantAvatar?: string 
   }[];
+  quizStats?: {
+    correctCount: number;
+    wrongCount: number;
+    correctPercentage: number;
+    correctAnswer?: string | string[] | boolean | number;
+  };
 }
 
 export interface MeetingStoreData {

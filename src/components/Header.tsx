@@ -5,7 +5,6 @@ import {
   Calendar,
   Clock,
   Trophy,
-  QrCode,
   Shield,
   LogOut
 } from 'lucide-react';
@@ -24,7 +23,6 @@ interface HeaderProps {
   viewMode: 'participant' | 'admin';
   profile: ParticipantProfile;
   sessionEnded?: boolean;
-  onOpenQR: () => void;
   onAdminLogout: () => void;
   onOpenProfileModal: () => void;
   onOpenLeaderboard: () => void;
@@ -42,7 +40,6 @@ export const Header: React.FC<HeaderProps> = ({
   viewMode,
   profile,
   sessionEnded = false,
-  onOpenQR,
   onAdminLogout,
   onOpenProfileModal,
   onOpenLeaderboard,
@@ -165,17 +162,6 @@ export const Header: React.FC<HeaderProps> = ({
                 <Shield className="w-3.5 h-3.5 text-blue-600" />
                 <span>Yönetici Paneli</span>
               </span>
-
-              <button
-                id="header-qr-button"
-                type="button"
-                onClick={onOpenQR}
-                className="p-1.5 sm:px-3 sm:py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer"
-                title="Katılım QR Kodunu Göster"
-              >
-                <QrCode className="w-4 h-4 text-blue-600" />
-                <span className="hidden md:inline">QR Kod</span>
-              </button>
 
               <button
                 id="header-admin-logout-btn"
